@@ -19,6 +19,7 @@ LDFLAGS += -X "github.com/mattermost/focalboard/server/model.BuildHash=$(BUILD_H
 all: webapp server ## Build server and webapp.
 
 prebuild: ## Run prebuild actions (install dependencies etc.).
+    ## cd webapp
 	cd webapp; npm install
 
 ci: server-test
@@ -87,20 +88,11 @@ server-lint: ## Run linters on server code.
 	cd server; golangci-lint run ./...
 	cd mattermost-plugin; golangci-lint run ./...
 
-modd-precheck:
-	@if ! [ -x "$$(command -v modd)" ]; then \
-		echo "modd is not installed. Please see https://github.com/cortesi/modd#install for installation instructions"; \
-		exit 1; \
-	fi; \
 
-watch: modd-precheck ## Run both server and webapp watching for changes
-	modd
+watch:
+	cd server && go build -o ../bin/focalboard-server ./main
+	./bin/focalboard-server $FOCALBOARDSERVER_ARGS
 
-watch-single-user: modd-precheck ## Run both server and webapp in single user mode watching for changes
-	env FOCALBOARDSERVER_ARGS=--single-user modd
-
-watch-server-test: modd-precheck ## Run server tests watching for changes
-	modd -f modd-servertest.conf
 
 server-test: server-test-sqlite server-test-mysql server-test-postgres ## Run server tests
 
@@ -115,7 +107,7 @@ server-test-mysql: ## Run server tests using mysql
 	@echo Starting docker container for mysql
 	docker-compose -f ./docker-testing/docker-compose-mysql.yml run start_dependencies
 	cd server; go test -race -v -count=1 ./...
-	docker-compose -f ./docker-testing/docker-compose-mysql.yml down -v --remove-orphans 
+	docker-compose -f ./docker-testing/docker-compose-mysql.yml down -v --remove-orphans
 
 server-test-postgres: export FB_UNIT_TESTING=1
 server-test-postgres: export FB_STORE_TEST_DB_TYPE=postgres
@@ -125,16 +117,18 @@ server-test-postgres: ## Run server tests using postgres
 	@echo Starting docker container for postgres
 	docker-compose -f ./docker-testing/docker-compose-postgres.yml run start_dependencies
 	cd server; go test -race -v -count=1 ./...
-	docker-compose -f ./docker-testing/docker-compose-postgres.yml down -v --remove-orphans 
+	docker-compose -f ./docker-testing/docker-compose-postgres.yml down -v --remove-orphans
 
 webapp: ## Build webapp.
 	cd webapp; npm run pack
 
-watch-plugin: modd-precheck ## Run and upload the plugin to a development server
-	modd -f modd-watchplugin.conf
 
 live-watch-plugin: modd-precheck ## Run and update locally the plugin in the development server
-	cd mattermost-plugin; make live-watch
+	cd mattermost-plugin;\
+	 make live-watch & ;\
+	  cd ../webapp; npm run watch &
+
+
 
 mac-app: server-mac webapp ## Build Mac application.
 	rm -rf mac/temp
